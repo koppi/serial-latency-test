@@ -4,6 +4,12 @@ serial-latency-test measures the roundtrip time of packets sent over
 the serial port. It calculates the worst case roundtrip time of all
 sent packets and displays a histogram of the rountrip time jitter.
 
+### demo
+
+[![youtube](http://img.youtube.com/vi/2HOwFQcZfV4/0.jpg)](http://www.youtube.com/watch?v=2HOwFQcZfV4)
+
+### usage
+
 ```
 $ serial-latency-test -h
 Usage: serial-latency-test -p <port> ...
