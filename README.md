@@ -32,3 +32,8 @@ Usage: serial-latency-test -p <port> ...
   -h, --help         this help
   -V, --version      print current version
 ```
+
+### related utilities
+
+* https://github.com/cbrake/linux-serial-test
+
