@@ -308,9 +308,9 @@ int main(int argc, char *argv[])
 #endif
                             "x:"  /* xmit */
 #endif
-                            "o:", /* output */
-                            "n:", /* printinterval */
-                            "l",  /* live */
+                            "o:" /* output */
+                            "n:" /* printinterval */
+                            "l"  /* live */
                             "q",  /* quiet */
                             long_options, NULL)) != -1) {
         switch (c) {
