@@ -75,7 +75,7 @@
 #define RAIL(v, min, max) (MIN((max), MAX((min), (v))))
 #endif
 
-static int printinterval = 1;
+static int printinterval = 1000;
 
 static volatile sig_atomic_t signal_received = 0;
 
@@ -124,29 +124,41 @@ static int set_realtime_priority(int policy, int prio)
     return 0;
 }
 
+
+unsigned long millis(){
+    struct timespec _t;
+    clock_gettime(CLOCK_REALTIME, &_t);
+    return _t.tv_sec*1000 + lround(_t.tv_nsec/1.0e6);
+}
+
+
+
 static void usage(const char *argv0)
 {
     printf("Usage: %s -p <port> ...\n\n"
-           "  -p, --port=port    serial port to run tests on\n"
-           "  -b, --baud=baud    baud rate (default: 9600)\n"
+           "  -p, --port=port        serial port to run tests on\n"
+           "  -b, --baud=baud        baud rate (default: 9600)\n"
 #if defined (HAVE_SCHED_H)
-           "  -R, --realtime     use realtime scheduling (default: no)\n"
-           "  -P, --priority=n   scheduling priority, use with -R\n"
-           "                     (default: 99)\n\n"
+           "  -R, --realtime         use realtime scheduling (default: no)\n"
+           "  -P, --priority=n       scheduling priority, use with -R\n"
+           "                         (default: 99)\n\n"
 #endif
-           "  -S, --samples=n    to take for the measurement (default: 10000)\n"
-           "  -c, --count=n      number of bytes to send per sample (default: 1)\n"
-           "  -w, --wait=ms      time interval between measurements (default: 0)\n"
-           "  -r, --random-wait  use random interval between wait and 2*wait\n\n"
+           "  -S, --samples=n        to take for the measurement (default: 10000)\n"
+           "  -c, --count=n          number of bytes to send per sample (default: 1)\n"
+           "  -w, --wait=ms          time interval between measurements (default: 0)\n"
+           "  -r, --random-wait      use random interval between wait and 2*wait\n\n"
 #if defined (HAVE_LINUX_SERIAL_H)
 #if defined (ASYNC_LOW_LATENCY)
-           "  -a, --async        set ASYNC_LOW_LATENCY flag (default: no)\n"
+           "  -a, --async            set ASYNC_LOW_LATENCY flag (default: no)\n"
 #endif
-           "  -x  --xmit=n       set xmit_fifo_size to given number (default: 0)\n"
+           "  -x  --xmit=n           set xmit_fifo_size to given number (default: 0)\n"
 #endif
-           "  -o, --output=file  write the output to file\n\n"
-           "  -h, --help         this help\n"
-           "  -V, --version      print current version\n\n"
+           "  -o, --output=file      write the output to file\n\n"
+           "  -n, --printinterval=n  print new stats line every n ms (default: 1000)\n"
+           "  -l, --live             print stats for each sample\n"
+           "  -q, --quiet            print only summary to stdout\n\n"
+           "  -h, --help             this help\n"
+           "  -V, --version          print current version\n\n"
            "Report bugs to Jakob Flierl <jakob.flierl@gmail.com>\n"
            "Website and manual: https://github.com/koppi/serial-latency-test\n"
            "\n", argv0);
@@ -239,9 +251,15 @@ int main(int argc, char *argv[])
 #endif
         {"xmit", required_argument, NULL, 'x'},
 #endif
+        {"printinterval", required_argument, NULL, 'n'},
+        {"live", no_argument, NULL, 'l'},
+        {"quiet", no_argument, NULL, 'q'},
+
         {"output", required_argument, NULL, 'o'},
         {}
     };
+
+
 
 #if defined (HAVE_SCHED_H)
     int do_realtime = 0;
@@ -258,6 +276,8 @@ int main(int argc, char *argv[])
     int random_wait = 0;
     double wait = 0.0;
     char output[PATH_MAX];
+    int quiet = 0;
+    int live = 0;
 
     serial_t s;
 
@@ -288,7 +308,10 @@ int main(int argc, char *argv[])
 #endif
                             "x:"  /* xmit */
 #endif
-                            "o:", /* output */
+                            "o:" /* output */
+                            "n:" /* printinterval */
+                            "l"  /* live */
+                            "q",  /* quiet */
                             long_options, NULL)) != -1) {
         switch (c) {
         case 'h':
@@ -355,6 +378,16 @@ int main(int argc, char *argv[])
             break;
         case 'o':
             strncpy(output, optarg, sizeof(output));
+            break;
+
+        case 'n':
+            printinterval = atoi(optarg);
+            break;
+        case 'l':
+            live = 1;
+            break;
+        case 'q':
+            quiet = 1;
             break;
         default:
             usage(argv[0]);
@@ -452,7 +485,7 @@ int main(int argc, char *argv[])
         buf_tx[i] = i % 255;
     }
 
-    time_t last = time(NULL);
+    unsigned long last = millis();
 
     int err = 0;
 
@@ -504,22 +537,27 @@ int main(int argc, char *argv[])
         double delay = ConvertTimeDifferenceToSec(&end, &begin) * 1000.0;
 
         delays[cnt_a] = delay;
-
-        time_t now = time(NULL);
-
-        if (printinterval > 0 && now >= last + printinterval) {
-            last = now;
-            if (cnt_a > 0)
-                printf("\n");
-        }
-
         avg_a += delay;
 
         if (delay < min_a) min_a = delay;
         if (delay > max_a) max_a = delay;
 
-        printf(" %7d %8.2f %8.2f %8.2f %8.2f\r", cnt_a, delay, min_a, max_a, avg_a / (double)cnt_a);
-
+        if(!quiet){
+            unsigned long now = millis();
+            int printcurrent = live;
+            static int first = 1;
+            if (printinterval > 0 && now >= last + printinterval) {
+                last = now;
+                if (!first){
+                    printf("\n");
+                }
+                first = 0;
+                printcurrent = 1;   // if live=0 => only print in interval
+            }
+            if(printcurrent){
+                printf(" %7d %8.2f %8.2f %8.2f %8.2f\r", cnt_a, delay, min_a, max_a, avg_a / (double)cnt_a);
+            }
+        }
         /* histogram */
         if (cnt_a < HISTLEN) {
             history[cnt_a] = delay;
