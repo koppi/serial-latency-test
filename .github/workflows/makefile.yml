@@ -28,5 +28,4 @@ jobs:
         sudo dpkg -i ../serial-latency-test*.deb
         sudo apt-get -f install
         serial-latency-test -V
-        lintian -i ../serial-latency-test*.dsc
 
