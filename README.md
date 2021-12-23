@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/koppi/serial-latency-test.png?branch=master)](https://travis-ci.org/koppi/serial-latency-test)
+[![Makefile CI](https://github.com/koppi/serial-latency-test/actions/workflows/makefile.yml/badge.svg)](https://github.com/koppi/serial-latency-test/actions/workflows/makefile.yml)
 
 serial-latency-test measures the roundtrip time of packets sent over
 the serial port. It calculates the worst case roundtrip time of all
