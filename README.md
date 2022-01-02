@@ -1,6 +1,6 @@
 [![Makefile CI](https://github.com/koppi/serial-latency-test/actions/workflows/makefile.yml/badge.svg)](https://github.com/koppi/serial-latency-test/actions/workflows/makefile.yml)
 
-serial-latency-test measures the roundtrip time of packets sent over
+```serial-latency-test``` measures the roundtrip time of packets sent over
 the serial port. It calculates the worst case roundtrip time of all
 sent packets and displays a histogram of the rountrip time jitter.
 
@@ -36,4 +36,13 @@ Usage: serial-latency-test -p <port> ...
 ### related utilities
 
 * https://github.com/cbrake/linux-serial-test
+
+
+## BUGS and AUTHORS
+
+Please report bugs to the authors.
+
+ * **Jakob Flierl** - [koppi](https://github.com/koppi)
+
+-- Last updated Jan 2022.
 
