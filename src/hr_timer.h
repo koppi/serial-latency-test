@@ -66,7 +66,7 @@
 #endif
 	}
 
-	inline double ConvertTimeDifferenceToSec(timerStruct *end, timerStruct *begin) {
+	double ConvertTimeDifferenceToSec(timerStruct *end, timerStruct *begin) {
 
 		timerStruct temp;
 
