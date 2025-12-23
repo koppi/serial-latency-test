@@ -29,6 +29,12 @@
 #define clean_errno() (errno == 0 ? "None" : strerror(errno))
 #define log_err(M, ...) fprintf(stderr, "%s:%d: errno: %s " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__)
 
+#define SERIAL_MAX_RETRY 10000
+
+#define SERIAL_SUCCESS 0
+#define SERIAL_ERROR -1
+#define SERIAL_TIMEOUT -100
+
 ssize_t serial_writebyte(PORTTYPE fd, uint8_t byte)
 {
 	return serial_write(fd, &byte, 1);
@@ -49,7 +55,7 @@ ssize_t serial_write(PORTTYPE fd, const uint8_t *buf, size_t len)
 		DBG("len=%ld, n=%ld, error=%d %s", len, n, errno, strerror(errno));
 	}
 
-	if (n != len) return -1;
+	if (n != len) return SERIAL_ERROR;
 
 	return n;
 #endif
@@ -103,9 +109,11 @@ ssize_t serial_read(PORTTYPE fd, uint8_t *buf, size_t len)
 	while (count < len) {
 		r = read(fd, buf + count, len - count);
 		//printf("read, r = %d\n", r);
-		if (r < 0 && errno != EAGAIN && errno != EINTR) return -1;
-		else if (r > 0) count += r;
-		else {
+		if (r < 0 && errno != EAGAIN && errno != EINTR) return SERIAL_ERROR;
+		else if (r > 0) {
+			count += r;
+			retry = 0; // reset retry counter on successful read
+		} else {
 			// no data available right now, must wait
 			fd_set fds;
 			struct timeval t;
@@ -115,11 +123,11 @@ ssize_t serial_read(PORTTYPE fd, uint8_t *buf, size_t len)
 			t.tv_usec = 0;
 			r = select(fd+1, &fds, NULL, NULL, &t);
 			// printf("select, r = %d\n", r);
-			if (r < 0) return -1;
+			if (r < 0) return SERIAL_ERROR;
 			if (r == 0) return count; // timeout
+			retry++;
+			if (retry > SERIAL_MAX_RETRY) return SERIAL_TIMEOUT; // no input
 		}
-		retry++;
-		if (retry > 10000) return -100; // no input
 	}
 	//fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
 #endif
@@ -143,7 +151,7 @@ PORTTYPE serial_open(const char *port, int baud, struct termios *opts)
 
 	if (!strlen(port)) {
 		log_err("invalid port name %s", port);
-		return 0;
+		return SERIAL_ERROR;
 	}
 
 #if defined (_WIN32)
@@ -156,13 +164,13 @@ PORTTYPE serial_open(const char *port, int baud, struct termios *opts)
 		sprintf(portname, "\\\\.\\COM%d", num); // Microsoft KB115831
 	} else {
 		strncpy(portname, port, sizeof(portname)-1);
-		portname[n-1] = 0;
+		portname[sizeof(portname)-1] = 0;
 	}
 	fd = CreateFile(portname, GENERIC_READ | GENERIC_WRITE,
 					0, 0, OPEN_EXISTING, 0, NULL);
 	if (fd == INVALID_HANDLE_VALUE) {
 		log_err("unable to open port %s", port);
-		return 0;
+		return SERIAL_ERROR;
 	}
 
 	GetCommConfig(fd, &cfg, &n);
@@ -198,20 +206,20 @@ PORTTYPE serial_open(const char *port, int baud, struct termios *opts)
 
 	if (fd == -1)  {
 		log_err("open() failed");
-		return 0;
+		return SERIAL_ERROR;
 	}
 
 #if defined (HAVE_TERMIOS_H)
 	if (tcgetattr(fd, opts) < 0) {
 		log_err("tcgetattr() failed");
-		return 0;
+		return SERIAL_ERROR;
 	}
 
 	struct termios toptions;
 
 	if (tcgetattr(fd, &toptions) < 0) {
 		log_err("tcgetattr()");
-		return 0;
+		return SERIAL_ERROR;
 	}
 
 	speed_t brate = baud; // let you override switch below if needed
@@ -230,7 +238,7 @@ PORTTYPE serial_open(const char *port, int baud, struct termios *opts)
 #undef B
 	default:
 		log_err("unknown baud rate %d", baud);
-		return 0;
+		return SERIAL_ERROR;
 		break;
 	}
 
@@ -262,18 +270,18 @@ PORTTYPE serial_open(const char *port, int baud, struct termios *opts)
 
 	if (tcsetattr(fd, TCSANOW, &toptions) < 0) {
 		log_err("tcsetattr() failed");
-		return 0;
+		return SERIAL_ERROR;
 	}
 
 	int flags = fcntl(fd, F_GETFL);
 	if (fcntl(fd, F_SETFL, flags & (~O_NONBLOCK))) {
 		log_err("fcntl() failed");
-		return 0;
+		return SERIAL_ERROR;
 	}
 
 	if (tcflush(fd, TCIOFLUSH) < 0) {
 		log_err("tcflush() failed");
-		return 0;
+		return SERIAL_ERROR;
 	}
 #endif
 
@@ -307,7 +315,7 @@ int serial_set_low_latency(PORTTYPE fd) {
 
 	if (ioctl(fd, TIOCGSERIAL, &ser_info) < 0) {
 		log_err("ioctl(TIOCGSERIAL) failed");
-		return -1;
+		return SERIAL_ERROR;
 	}
 
 	ser_info.flags |= ASYNC_LOW_LATENCY;
@@ -328,7 +336,7 @@ int serial_set_xmit_fifo_size(PORTTYPE fd, int size) {
 
 	if (ioctl(fd, TIOCGSERIAL, &ser_info) < 0) {
 		log_err("ioctl(TIOCGSERIAL) failed");
-		return -1;
+		return SERIAL_ERROR;
 	}
 
 	DBG("xmit_fifo_size was %d\n", ser_info.xmit_fifo_size);
@@ -337,7 +345,7 @@ int serial_set_xmit_fifo_size(PORTTYPE fd, int size) {
 
 	if (ioctl(fd, TIOCSSERIAL, &ser_info) < 0) {
 		log_err("ioctl(TIOCSSERIAL) failed");
-		return -1;
+		return SERIAL_ERROR;
 	}
 
 	return 0;
@@ -348,7 +356,7 @@ int serial_get_xmit_fifo_size(PORTTYPE fd) {
 
 	if (ioctl(fd, TIOCGSERIAL, &ser_info) < 0) {
 		log_err("ioctl(TIOCGSERIAL) failed");
-		return -1;
+		return SERIAL_ERROR;
 	}
 
 	return ser_info.xmit_fifo_size;

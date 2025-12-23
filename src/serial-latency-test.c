@@ -326,7 +326,7 @@ int main(int argc, char *argv[])
             break;
 #endif
         case 'p':
-            strncpy(s.port, optarg, sizeof(s.port));
+            snprintf(s.port, sizeof(s.port), "%s", optarg);
             break;
         case 'b':
             s.baud = strtol(optarg, NULL, 10);
@@ -377,7 +377,7 @@ int main(int argc, char *argv[])
             random_wait = 1;
             break;
         case 'o':
-            strncpy(output, optarg, sizeof(output));
+            snprintf(output, sizeof(output), "%s", optarg);
             break;
 
         case 'n':
@@ -555,7 +555,7 @@ int main(int argc, char *argv[])
                 printcurrent = 1;   // if live=0 => only print in interval
             }
             if(printcurrent){
-                printf(" %7d %8.2f %8.2f %8.2f %8.2f\r", cnt_a, delay, min_a, max_a, avg_a / (double)cnt_a);
+                printf(" %7d %8.2f %8.2f %8.2f %8.2f\r", cnt_a, delay, min_a, max_a, cnt_a > 0 ? avg_a / (double)cnt_a : 0.0);
             }
         }
         /* histogram */
@@ -654,7 +654,7 @@ int main(int argc, char *argv[])
         printf("\n");
     }
 
-    free(histogram);
+    if (histogram) free(histogram);
     free(history);
 
     free(delays);
